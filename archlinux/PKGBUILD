@@ -1,0 +1,79 @@
+# vim: set et sw=2 sts=2 ts=2:
+# Maintainer: Cyrille Pontvieux <cyrille [at] enialis [dot] net>
+
+# "1" to enable IA32-EFI build in Arch x86_64, "0" to disable
+_ia32_efi_in_arch_x64="0"
+_grubver="2.04"
+
+[ "${CARCH}" = "x86_64" ] && _target_arch="x86_64"
+[ "${CARCH}" == "i686" ] && _target_arch="i386"
+_build_platforms="${_target_arch}"
+[ "${CARCH}" = "x86_64" ] && [ "${_ia32_efi_in_arch_x64}" = "1" ] && _build_platforms+=" i386"
+
+pkgname=grub-hackbgrt
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="Hack BGRT for Grub2 (EFI)"
+arch=('x86_64' 'i686')
+url="https://github.com/jrd/grub2-hackbgrt"
+license=('GPL3')
+depends=('grub')
+makedepends=(
+  'autogen'
+  'gettext'
+  'git'
+  'help2man'
+  'python'
+  'texinfo'
+)
+options=('!buildflags')
+install=grub2-hackbgrt.install
+source=(
+  "grub-${_grubver}.tar.xz::https://ftp.gnu.org/gnu/grub/grub-${_grubver}.tar.xz"
+  "hackbgrt-${pkgver}.tar.gz::https://github.com/jrd/grub2-hackbgrt/archive/${pkgver}.tar.gz"
+)
+sha256sums=(
+  'e5292496995ad42dabe843a0192cf2a2c502e7ffcc7479398232b10a472df77d'
+  'SKIP'
+)
+
+prepare() {
+  cd grub-${_grubver}
+  cp -r ../hackbgrt-${pkgver}/src/hackbgrt grub-core/commands/efi/
+  cat ../hackbgrt-${pkgver}/src/Makefile.core.def >> grub-core/Makefile.core.def
+  ./autogen.sh
+}
+
+build() {
+  cd grub-${_grubver}
+  for _arch in $_build_platforms; do
+    grub_build_mkfont_excuse="disabled" ./configure \
+      --target=${_arch} \
+      --with-platform=efi \
+      --prefix=/usr \
+      --with-bootdir=/boot \
+      --with-grubdir=grub \
+      --disable-grub-mkfont \
+      --disable-grub-mount \
+      --disable-grub-themes \
+      --disable-device-mapper \
+      --disable-libzfs \
+      --disable-dependency-tracking \
+      --disable-werror
+    cd grub-core
+    # make only the necessary
+    make \
+      grub_script.tab.h \
+      grub_script.yy.h \
+      hackbgrt.mod \
+      moddep.lst \
+      command.lst
+    mkdir -p ${pkgdir}/usr/lib/grub/${_arch}-efi ${_pkgdir}/usr/share/grub2-hackbgrt/${_arch}/
+    cp hackbgrt.mod ${_pkgdir}/usr/lib/grub/${_arch}-efi/
+    echo "$(grep ^hackbgrt: moddep.lst)" > ${_pkgdir}/usr/share/grub2-hackbgrt/${_arch}/moddep.lst
+    echo "$(grep hackbgrt: command.lst)" > ${_pkgdir}/usr/share/grub2-hackbgrt/command.lst
+  done
+}
+
+package() {
+}

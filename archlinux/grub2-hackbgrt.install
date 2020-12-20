@@ -1,0 +1,27 @@
+#!/bin/sh
+# vim: set et sw=2 sts=2 ts=2:
+
+post_install() {
+  for _arch in x86_64 i386; do
+    [ -d usr/lib/grub/${_arch}-efi ] && [ -d usr/share/grub2-hackbgrt/${_arch} ] || continue
+    if ! grep -q hackbgrt: usr/lib/grub/${_arch}-efi/moddep.lst; then
+      cat usr/share/grub2-hackbgrt/${_arch}/moddep.lst >> usr/lib/grub/${_arch}-efi/moddep.lst
+    fi
+    if ! grep -q hackbgrt: usr/lib/grub/${_arch}-efi/command.lst; then
+      cat usr/share/grub2-hackbgrt/${_arch}/command.lst >> usr/lib/grub/${_arch}-efi/command.lst
+    fi
+  done
+  grub-install
+}
+
+post_remove() {
+  for _arch in x86_64 i386; do
+    [ -d usr/lib/grub/${_arch}-efi ] || continue
+    for f in moddep.lst command.lst; do
+      sed -ri '/hackbgrt:/d' usr/lib/grub/${_arch}-efi/\$f
+    done
+  done
+  grub-install
+}
+
+

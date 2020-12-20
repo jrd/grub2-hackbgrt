@@ -44,7 +44,7 @@ make \
 cd ../..
 mkdir -p ${_pkgdir}/usr/lib/grub/${_arch}-efi
 cp grub-${_grubver}/grub-core/hackbgrt.mod ${_pkgdir}/usr/lib/grub/${_arch}-efi/
-cat > ${_pkgdir}/grub2-hackbgrt.install <<EOF
+cat > ${_pkgdir}/grub2-hackbgrt.src <<EOF
 #!/bin/sh
 
 post_install() {
