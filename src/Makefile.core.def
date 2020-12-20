@@ -1,0 +1,8 @@
+module = {
+    name = hackbgrt;
+    common = commands/efi/hackbgrt/hackbgrt.c;
+    common = commands/efi/hackbgrt/config.c;
+    common = commands/efi/hackbgrt/types.c;
+    enable = i386_efi;
+    enable = x86_64_efi;
+};
