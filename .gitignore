@@ -1,0 +1,4 @@
+grub-*/
+grub-*.tar.xz
+usr/
+*.install
