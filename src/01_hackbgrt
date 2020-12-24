@@ -1,0 +1,13 @@
+#!/bin/sh
+set -e
+export TEXTDOMAIN=grub
+export TEXTDOMAINDIR="${datarootdir}/locale"
+. "$pkgdatadir/grub-mkconfig_lib"
+if [ -d /boot/efi ] && [ -e /sys/firmware/efi/efivars ]; then
+  _GRUB_ESP_STRING="($(${grub_probe} --target=hints_string /boot/efi|tr ' ' '\n'|grep hint-efi|cut -d= -f2))"
+  echo "Adding hackbgrt..." >&2
+  cat << EOF
+insmod hackbgrt
+hackbgrt ${_GRUB_ESP_STRING}
+EOF
+fi
