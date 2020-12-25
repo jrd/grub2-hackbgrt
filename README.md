@@ -19,18 +19,14 @@ Usage
 
 ```sh
 insmod hackbgrt
-hackbgrt (hd0,gpt1)
+hackbgrt (hd0,gpt1) image=/relative/path/to/bmp|keep|remove[,x=123|center|keep,y=456|center|keep][,weight=1] [image=...]*
 ```
 
-Where `(hd0,gpt1)` is your `ESP` (EFI System Partition) as seen by GRUB2.
+Where:
 
-In the `ESP`, a `/EFI/HackBGRT/config.txt` file should resides with the following content:
+- `(hd0,gpt1)` is your `ESP` (EFI System Partition) as seen by GRUB2.
+- `image` variable could take a 24-bit BMP splash path file, or the value `keep`, or the value `remove`.
+- `x` and `y` variables could be used to position the image. You can use an *absolute* position, or `center` value or `keep` value.
+- `weight` variable is use to add a weight (probability) to your image. Only useful if you use multiple `image` variables.
 
-```
-# image=keep
-# The file must be a 24-bit BMP file with a 54-byte header.
-# image=path=/EFI/HackBGRT/splash.bmp
-image=path=/EFI/HackBGRT/splash.bmp
-# Preferred resolution. Use 0x0 for maximum and -1x-1 for original.
-resolution=0x0
-```
+The Splash file should be **relative to the ESP partition** and should **start with a slash**.

@@ -8,143 +8,178 @@
 #include "config.h"
 
 
-char* str_strip(const char* s);
-char* str_str_after(const char* haystack, const char* needle);
-grub_err_t hackbgrt_read_config_file_getline (char **line, void *data);
-grub_err_t hackbgrt_parse_line (char* line, const char* esp_path, hackbgrt_config_t config);
-void hackbgrt_set_bmp_with_random(hackbgrt_config_t config, const char* esp_path, int weight, enum hackbgrt_action action, int x, int y, const char* path);
+grub_err_t hackbgrt_parse_param (const char* param, const char* esp_path, hackbgrt_config_t config, int* image_weight_sum_p);
+char** hackbgrt_strsplit (const char* s, const char separator);
+char* hackbgrt_strsep (char** stringp, const char separator);
 int hackbgrt_parse_coordinate(const char* str, enum hackbgrt_action action);
-void hackbgrt_read_config_image(const char* esp_path, hackbgrt_config_t config, const char* line);
-void hackbgrt_read_config_resolution(hackbgrt_config_t config, const char* line);
-
-
-/**
- * Strip spaces and tabs from the beginning/ending of a string.
- *
- * @param s The string.
- * @return new string pointer (should be freed).
- */
-char*
-str_strip(const char* s)
-{
-  grub_size_t len = grub_strlen (s);
-  grub_size_t skip_start;
-  grub_size_t skip_end;
-  char* ret;
-
-  for (skip_start = 0; s[0] && (s[0] == ' ' || s[0] == '\t'); skip_start++);
-  for (skip_end = 0; len - skip_end > 0 && (s[len - skip_end] == ' ' || s[len - skip_end] == '\t'); skip_end++);
-  ret = grub_zalloc (len - skip_start - skip_end + 1);
-  grub_strncpy (ret, s + skip_start, len - skip_start - skip_end);
-  return ret;
-}
-
-/**
- * Find the position after another string within a string.
- *
- * @param haystack The full text.
- * @param needle The string to look for.
- * @return new string pointer (should be freed).
- */
-char*
-str_str_after(const char* haystack, const char* needle)
-{
-  return (haystack = grub_strstr(haystack, needle)) ? grub_strdup(haystack + grub_strlen(needle)) : 0;
-}
+void hackbgrt_set_config_with_random(const char* esp_path, hackbgrt_config_t config, enum hackbgrt_action action, const char* path, int x, int y, int weight, int* weight_sum_p);
 
 
 hackbgrt_config_t
-hackbgrt_read_config (const char* esp_path, const char* config_path)
+hackbgrt_read_config (const char* esp_path, const char* params[], const grub_size_t params_count)
 {
-  grub_file_t rawfile, file;
-  hackbgrt_config_t config;
-
-  config = grub_zalloc (sizeof (*config));
+  const char* param;
+  hackbgrt_config_t config = grub_zalloc (sizeof (struct hackbgrt_config));
   if (! config)
     return 0;
-  /* Try to open the config file.  */
-  rawfile = grub_file_open (config_path, GRUB_FILE_TYPE_CONFIG);
-  if (! rawfile)
-    return 0;
-  file = grub_bufio_open (rawfile, 0);
-  if (! file)
+  int image_weight_sum = 0;
+  for (grub_size_t i = 0; i < params_count; i++)
   {
-    grub_file_close (rawfile);
-    return 0;
-  }
-  while (1)
-  {
-    char *line;
+    param = params[i];
+    hackbgrt_parse_param (param, esp_path, config, &image_weight_sum);
     /* Print an error, if any.  */
     grub_print_error ();
-    grub_errno = GRUB_ERR_NONE;
-    if ((hackbgrt_read_config_file_getline (&line, file)) || (! line))
-      break;
-    hackbgrt_parse_line (line, esp_path, config);
-    grub_free (line);
   }
   grub_dprintf ("hackbgrt", "config is read\n");
-  grub_file_close (file);
   return config;
 }
 
-void
-hackbgrt_free_config (hackbgrt_config_t config)
-{
-  if (config->image_path)
-    grub_free (config->image_path);
-  grub_free (config);
-}
-
 grub_err_t
-hackbgrt_read_config_file_getline (char **line, void *data)
+hackbgrt_parse_param (const char* param, const char* esp_path, hackbgrt_config_t config, int* image_weight_sum_p)
 {
-  grub_file_t file = data;
-  while (1)
+  int action = HACKBGRT_REPLACE;
+  char* image_path = NULL;
+  char* image_x_str = NULL;
+  int image_x = HACKBGRT_COORD_AUTO;
+  char* image_y_str = NULL;
+  int image_y = HACKBGRT_COORD_AUTO;
+  char* image_weight_str = NULL;
+  int image_weight = 1;
+
+  grub_errno = GRUB_ERR_NONE;
+  char** var_values = hackbgrt_strsplit (param, ',');
+  for (char* var_value = *var_values; var_value; var_value += sizeof (char*))
   {
-    char *buf;
-    *line = buf = grub_file_getline (file);
-    if (! buf)
-      return grub_errno;
-    if (buf[0] == '#')
-      grub_free (*line);
-    else
+    char* var = hackbgrt_strsep (&var_value, '=');
+    char* value = var_value;
+    if (!value)
+    {
+      grub_error (GRUB_ERR_READ_ERROR, "No variable=value defined in parameter: %s", param);
       break;
-  }
-  return GRUB_ERR_NONE;
-}
-
-grub_err_t
-hackbgrt_parse_line (char* line, const char* esp_path, hackbgrt_config_t config)
-{
-  char* strip_line = str_strip (line);
-  if (strip_line[0])
-  {
-    grub_errno = GRUB_ERR_NONE;
-    if (grub_strncmp(line, "image=", 6) == 0)
-      hackbgrt_read_config_image(esp_path, config, strip_line + 6);
-    else if (grub_strncmp(line, "resolution=", 11) == 0)
-      hackbgrt_read_config_resolution(config, strip_line + 11);
+    }
+    if (grub_strcmp(var, "image") == 0 && !image_path)
+      image_path = value;
+    else if (grub_strcmp(var, "x") == 0 && !image_x_str)
+      image_x_str = value;
+    else if (grub_strcmp(var, "y") == 0 && !image_y_str)
+      image_y_str = value;
+    else if (grub_strcmp(var, "weight") == 0 && !image_weight_str)
+      image_weight_str = value;
     else
-      grub_error (GRUB_ERR_READ_ERROR, "Unknown configuration directive: %s", line);
+    {
+      grub_error (GRUB_ERR_READ_ERROR, "Unknown variable in parameter: %s", param);
+      break;
+    }
   }
-  grub_free (strip_line);
+  if (grub_errno != GRUB_ERR_NONE)
+    goto fail;
+  if (image_path == NULL)
+  {
+    grub_error (GRUB_ERR_READ_ERROR, "image variable should be defined in parameter: %s", param);
+    goto fail;
+  }
+  else
+  {
+    if (grub_strcmp(image_path, "keep") == 0)
+    {
+      action = HACKBGRT_KEEP;
+      image_x = HACKBGRT_COORD_KEEP;
+      image_y = HACKBGRT_COORD_KEEP;
+    }
+    else if (grub_strcmp(image_path, "remove") == 0)
+    {
+      action = HACKBGRT_REMOVE;
+      image_x = 0;
+      image_y = 0;
+    }
+    else if (grub_strncmp(image_path, "/", 1) != 0)
+    {
+      grub_error (GRUB_ERR_READ_ERROR, "image variable should define a BMP image path or 'keep' or 'remove': %s", param);
+      goto fail;
+    }
+  }
+  if (image_x_str != NULL)
+    image_x = hackbgrt_parse_coordinate (image_x_str, action);
+  if (image_y_str != NULL)
+    image_y = hackbgrt_parse_coordinate (image_y_str, action);
+  if (image_weight_str != NULL)
+    image_weight = (int) grub_strtoul (image_weight_str, 0, 10);
+  hackbgrt_set_config_with_random(esp_path, config, action, image_path, image_x, image_y, image_weight, image_weight_sum_p);
+  goto succeed;
+fail:
+  grub_print_error ();
+succeed:
+  for (char* var_value = *var_values; var_value; var_value += sizeof (char*))
+    grub_free (var_value);
+  grub_free (var_values);
   return grub_errno;
 }
 
+char**
+hackbgrt_strsplit (const char* s, const char separator)
+{
+  grub_size_t count = 2; // n + 1 intervals, last one is null
+  char** ret;
+
+  for (char* c = (char*) s; *c; c++)
+    if (*c == separator)
+      count++;
+  ret = (char**) grub_malloc (sizeof (char*) * count);
+  char** elem_p = ret;
+  for (char* part = grub_strdup (s); part;)
+  {
+    char* elem = hackbgrt_strsep (&part, separator);
+    if (elem)
+    {
+      *elem_p = elem;
+      elem_p += sizeof (char*);
+    }
+  }
+  *elem_p = NULL;
+  return ret;
+}
+
+char*
+hackbgrt_strsep (char** stringp, const char separator)
+{
+  char* begin = *stringp;
+  if (begin == NULL)
+    return NULL;
+  char* end = grub_strchr (begin, separator);
+  if (*end)
+  {
+    *end++ = '\0';
+    *stringp = end;
+  }
+  else
+    *stringp = NULL;
+  return begin;
+}
+
+int
+hackbgrt_parse_coordinate(const char* str, enum hackbgrt_action action)
+{
+  if (str && '1' <= str[0] && str[0] <= '9')
+    return (int) grub_strtoul (str, 0, 10);
+  if ((str && grub_strncmp(str, "keep", 4) == 0) || action == HACKBGRT_KEEP)
+    return HACKBGRT_COORD_KEEP;
+  return HACKBGRT_COORD_AUTO;
+}
+
 void
-hackbgrt_set_bmp_with_random(hackbgrt_config_t config, const char* esp_path, int weight, enum hackbgrt_action action, int x, int y, const char* path)
+hackbgrt_set_config_with_random(const char* esp_path, hackbgrt_config_t config, enum hackbgrt_action action, const char* path, int x, int y, int weight, int* weight_sum_p)
 {
   grub_uint32_t random;
   grub_uint32_t limit;
   grub_size_t esp_len;
   grub_size_t path_len;
+  int weight_sum = *weight_sum_p;
 
   grub_crypto_get_random (&random, sizeof (grub_uint32_t));
-  config->image_weight_sum += weight;
-  limit = 0xfffffffful / config->image_weight_sum * weight;
-  grub_dprintf("hackbgrt", "HackBGRT: weight %d, action %d, x %d, y %d, path %s, random = %08x, limit = %08x\n", weight, action, x, y, path, random, limit);
-  if (!config->image_weight_sum || random <= limit)
+  weight_sum += weight;
+  limit = 0xfffffffful / weight_sum * weight;
+  grub_dprintf("hackbgrt", "HackBGRT: action %d, path %s, x %d, y %d, weight %d, random = %08x, limit = %08x\n", action, path, x, y, weight, random, limit);
+  if (!weight_sum || random <= limit)
   {
     config->action = action;
     esp_len = grub_strlen (esp_path);
@@ -157,53 +192,10 @@ hackbgrt_set_bmp_with_random(hackbgrt_config_t config, const char* esp_path, int
   }
 }
 
-#define atoi_1(p) (*(p) - '0')
-
-int
-hackbgrt_parse_coordinate(const char* str, enum hackbgrt_action action)
-{
-  if (str && '0' <= str[0] && str[0] <= '9')
-    return atoi_1(str);
-  if ((str && grub_strncmp(str, "native", 6) == 0) || action == HACKBGRT_KEEP)
-    return HACKBGRT_COORD_NATIVE;
-  return HACKBGRT_COORD_AUTO;
-}
-
 void
-hackbgrt_read_config_image(const char* esp_path, hackbgrt_config_t config, const char* line)
+hackbgrt_free_config (hackbgrt_config_t config)
 {
-  const char* n = str_str_after(line, "n=");
-  const char* x = str_str_after(line, "x=");
-  const char* y = str_str_after(line, "y=");
-  const char* path = str_str_after(line, "path=");
-  enum hackbgrt_action action = HACKBGRT_KEEP;
-  if (path)
-    action = HACKBGRT_REPLACE;
-  else if (grub_strstr(line, "remove"))
-    action = HACKBGRT_REMOVE;
-  else if (grub_strstr(line, "black"))
-    action = HACKBGRT_REPLACE;
-  else if (grub_strstr(line, "keep"))
-    action = HACKBGRT_KEEP;
-  else
-  {
-    grub_error(GRUB_ERR_READ_ERROR, "HackBGRT: Invalid image line: %s", line);
-    return;
-  }
-  int weight = n && (!path || n < path) ? atoi_1(n) : 1;
-  hackbgrt_set_bmp_with_random(config, esp_path, weight, action, hackbgrt_parse_coordinate(x, action), hackbgrt_parse_coordinate(y, action), path);
-}
-
-void
-hackbgrt_read_config_resolution(hackbgrt_config_t config, const char* line)
-{
-  const char* x = line;
-  const char* y = str_str_after(line, "x");
-  if (x && *x && y && *y)
-  {
-    config->resolution_x = *x == '-' ? -(int) atoi_1(x + 1) : (int) atoi_1(x);
-    config->resolution_y = *y == '-' ? -(int) atoi_1(y + 1) : (int) atoi_1(y);
-  }
-  else
-    grub_error(GRUB_ERR_READ_ERROR, "HackBGRT: Invalid resolution line: %s", line);
+  if (config->image_path)
+    grub_free (config->image_path);
+  grub_free (config);
 }

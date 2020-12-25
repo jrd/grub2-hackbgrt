@@ -8,6 +8,6 @@ if [ -d /boot/efi ] && [ -e /sys/firmware/efi/efivars ]; then
   echo "Adding hackbgrt..." >&2
   cat << EOF
 insmod hackbgrt
-hackbgrt ${_GRUB_ESP_STRING}
+hackbgrt ${_GRUB_ESP_STRING} image=keep
 EOF
 fi

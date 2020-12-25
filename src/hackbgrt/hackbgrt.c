@@ -1,22 +1,3 @@
-/*
- *  GRUB  --  GRand Unified Bootloader
- *  Copyright (C) 2003,2007  Free Software Foundation, Inc.
- *  Copyright (C) 2003  NIIBE Yutaka <gniibe@m17n.org>
- *
- *  GRUB is free software: you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation, either version 3 of the License, or
- *  (at your option) any later version.
- *
- *  GRUB is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with GRUB.  If not, see <http://www.gnu.org/licenses/>.
- */
-
 #include <grub/acpi.h>
 #include <grub/charset.h>
 #include <grub/dl.h>
@@ -395,7 +376,7 @@ static bitmap_t load_bmp(const char* path)
 static int select_coordinate(int value, int automatic, int native) {
   if (value == HACKBGRT_COORD_AUTO)
     return automatic;
-  else if (value == HACKBGRT_COORD_NATIVE)
+  else if (value == HACKBGRT_COORD_KEEP)
     return native;
   return value;
 }
@@ -494,27 +475,19 @@ hack_bgrt(hackbgrt_config_t config)
 static grub_err_t
 grub_cmd_hackbgrt (grub_extcmd_context_t ctxt __attribute__ ((unused)),
                    int argc,
-		   char* argv[])
+                   char* argv[])
 {
-  const char* base_config_path = "/EFI/HackBGRT/config.txt";
-  grub_size_t base_len;
   grub_size_t esp_arg_len;
-  char* config_path;
   hackbgrt_config_t config;
 
-  if (argc == 0)
-    return grub_error (GRUB_ERR_BAD_ARGUMENT, N_("EFI system partition (ESP) expected"));
+  if (argc < 2)
+    return grub_error (GRUB_ERR_BAD_ARGUMENT, N_("EFI system partition (ESP) and image= argument expected"));
   esp_arg_len = grub_strlen (argv[0]);
   if (esp_arg_len < 5 || argv[0][0] != '(' || argv[0][esp_arg_len - 1] != ')')
   {
     return grub_error (GRUB_ERR_BAD_ARGUMENT, N_("format (hd0,gpt1) expected"));
   }
-  base_len = grub_strlen (base_config_path);
-  config_path = grub_zalloc (esp_arg_len + base_len + 1);
-  grub_strncpy (config_path, argv[0], esp_arg_len);
-  grub_strncpy (config_path + esp_arg_len, base_config_path, base_len);
-  grub_dprintf ("hackbgrt", "Hack BGRT config file=%s\n", config_path);
-  config = hackbgrt_read_config (argv[0], config_path);
+  config = hackbgrt_read_config (argv[0], (const char**) argv + 1, argc - 1);
   if (! config)
   {
     grub_print_error ();
@@ -526,8 +499,6 @@ grub_cmd_hackbgrt (grub_extcmd_context_t ctxt __attribute__ ((unused)),
   grub_dprintf ("hackbgrt", "ending hack\n");
 fail:
   grub_dprintf ("hackbgrt", "free some memory\n");
-  if (config_path)
-    grub_free (config_path);
   if (config)
     hackbgrt_free_config (config);
   grub_dprintf ("hackbgrt", "end of my code\n");
@@ -542,7 +513,7 @@ GRUB_MOD_INIT(hackbgrt)
       "hackbgrt",
       grub_cmd_hackbgrt,
       GRUB_COMMAND_FLAG_BLOCKS,
-      N_("EFI_PARTITION"),
+      N_("EFI_PARTITION image=/relative/path/to/bmp|keep|remove[,x=123|center|keep,y=456|center|keep][,weight=1] [image=...]*"),
       N_("Change the BGRT image."),
       0
   );

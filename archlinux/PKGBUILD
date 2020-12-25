@@ -11,7 +11,7 @@ _build_platforms="${_target_arch}"
 [ "${CARCH}" = "x86_64" ] && [ "${_ia32_efi_in_arch_x64}" = "1" ] && _build_platforms+=" i386"
 
 pkgname=grub-hackbgrt
-pkgver=0.2.0
+pkgver=0.3.0
 pkgrel=1
 pkgdesc="Hack BGRT for Grub2 (EFI)"
 arch=('x86_64' 'i686')
