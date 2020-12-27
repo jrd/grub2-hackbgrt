@@ -14,6 +14,21 @@ However the ACPI table describing the logo could still be changed (not permanent
 
 This is what this GRUB2 module do.
 
+Installation
+------------
+
+Local installation:
+
+```sh
+$ make && sudo make install
+```
+
+`grubver` variable designates the matching grub version and is `2.04` by default.
+`platform` indicates the cpu platform architecture: `x86_64` (default) or `i386`.
+`DESTDIR` variable is respected at installation.
+
+A `PKGBUILD` is also provided for Arch-based distributions.
+
 Usage
 -----
 

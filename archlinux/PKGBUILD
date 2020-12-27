@@ -11,7 +11,7 @@ _build_platforms="${_target_arch}"
 [ "${CARCH}" = "x86_64" ] && [ "${_ia32_efi_in_arch_x64}" = "1" ] && _build_platforms+=" i386"
 
 pkgname=grub2-hackbgrt
-pkgver=master
+pkgver=0.3.0
 pkgrel=1
 pkgdesc="Hack BGRT for Grub2 (EFI)"
 arch=('x86_64' 'i686')
@@ -29,59 +29,24 @@ makedepends=(
 options=('!buildflags')
 install=${pkgname}.install
 backup=(etc/grub.d/01_hackbgrt)
-source=(
-  "grub-${_grubver}.tar.xz::https://ftp.gnu.org/gnu/grub/grub-${_grubver}.tar.xz"
-  "${pkgname}-${pkgver}.tar.gz::https://github.com/jrd/${pkgname}/archive/${pkgver}.tar.gz"
-)
-sha256sums=(
-  'e5292496995ad42dabe843a0192cf2a2c502e7ffcc7479398232b10a472df77d'
-  'SKIP'
-)
+source=("${pkgname}-${pkgver}.tar.gz::https://github.com/jrd/${pkgname}/archive/${pkgver}.tar.gz")
+sha256sums=('SKIP')
 
 prepare() {
-  cd grub-${_grubver}
-  cp -r ${srcdir}/${pkgname}-${pkgver}/src/hackbgrt grub-core/commands/efi/
-  cat ${srcdir}/${pkgname}-${pkgver}/src/Makefile.core.def >> grub-core/Makefile.core.def
-  ./autogen.sh
+  cd ${srcdir}/${pkgname}-${pkgver}
+  grubver=${_grubver} make prepare
 }
 
 build() {
-  cd grub-${_grubver}
-  for _arch in $_build_platforms; do
-    grub_build_mkfont_excuse="disabled" ./configure \
-      --target=${_arch} \
-      --with-platform=efi \
-      --prefix=/usr \
-      --with-bootdir=/boot \
-      --with-grubdir=grub \
-      --disable-grub-mkfont \
-      --disable-grub-mount \
-      --disable-grub-themes \
-      --disable-device-mapper \
-      --disable-libzfs \
-      --disable-dependency-tracking \
-      --disable-werror
-    mkdir -p "build${_arch}"
-    cd grub-core
-    # make only the necessary
-    make \
-      grub_script.tab.h \
-      grub_script.yy.h \
-      hackbgrt.mod \
-      moddep.lst \
-      command.lst
-    cp hackbgrt.mod moddep.lst command.lst ../"build${_arch}"/
+  cd ${srcdir}/${pkgname}-${pkgver}
+  for _platform in $_build_platforms; do
+    grubver=${_grubver} platform=${_platform} make compile
   done
 }
 
 package() {
-  cd grub-${_grubver}
-  for _arch in $_build_platforms; do
-    mkdir -p ${pkgdir}/usr/lib/grub/${_arch}-efi ${pkgdir}/usr/share/${pkgname}/${_arch}
-    cp "build${_arch}"/hackbgrt.mod ${pkgdir}/usr/lib/grub/${_arch}-efi/
-    echo "$(grep ^hackbgrt: "build${_arch}"/moddep.lst)" > ${pkgdir}/usr/share/${pkgname}/${_arch}/moddep.lst
-    echo "$(grep hackbgrt: "build${_arch}"/command.lst)" > ${pkgdir}/usr/share/${pkgname}/${_arch}/command.lst
+  cd ${srcdir}/${pkgname}-${pkgver}
+  for _platform in $_build_platforms; do
+    grubver=${_grubver} platform=${_platform} DESTDIR=${pkgdir} make install-module install-lst install-grub-hackbgrt-conf
   done
-  mkdir -p ${pkgdir}/etc/grub.d
-  cp ${srcdir}/${pkgname}-${pkgver}/src/01_hackbgrt ${pkgdir}/etc/grub.d/
 }
