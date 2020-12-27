@@ -9,7 +9,7 @@
 
 
 grub_err_t hackbgrt_parse_param (const char* param, const char* esp_path, hackbgrt_config_t config, int* image_weight_sum_p);
-char** hackbgrt_strsplit (const char* s, const char separator);
+char** hackbgrt_strsplit (char* s, const char separator);
 char* hackbgrt_strsep (char** stringp, const char separator);
 int hackbgrt_parse_coordinate(const char* str, enum hackbgrt_action action);
 void hackbgrt_set_config_with_random(const char* esp_path, hackbgrt_config_t config, enum hackbgrt_action action, const char* path, int x, int y, int weight, int* weight_sum_p);
@@ -27,7 +27,6 @@ hackbgrt_read_config (const char* esp_path, const char* params[], const grub_siz
   {
     param = params[i];
     hackbgrt_parse_param (param, esp_path, config, &image_weight_sum);
-    /* Print an error, if any.  */
     grub_print_error ();
   }
   grub_dprintf ("hackbgrt", "config is read\n");
@@ -46,15 +45,20 @@ hackbgrt_parse_param (const char* param, const char* esp_path, hackbgrt_config_t
   char* image_weight_str = NULL;
   int image_weight = 1;
 
+  grub_dprintf("hackbgrt", "HackBGRT: param '%s' will be parsed\n", param);
   grub_errno = GRUB_ERR_NONE;
-  char** var_values = hackbgrt_strsplit (param, ',');
-  for (char* var_value = *var_values; var_value; var_value += sizeof (char*))
+  char* param_dup = grub_strdup (param);
+  char** var_values = hackbgrt_strsplit (param_dup, ',');
+  for (char** var_value_p = var_values; *var_value_p != NULL; var_value_p += sizeof (char*))
   {
-    char* var = hackbgrt_strsep (&var_value, '=');
+    char* var_value = *var_value_p;
+    if (grub_strlen (var_value) == 0)
+      continue;
     char* value = var_value;
-    if (!value)
+    char* var = hackbgrt_strsep (&value, '=');
+    if (value == NULL)
     {
-      grub_error (GRUB_ERR_READ_ERROR, "No variable=value defined in parameter: %s", param);
+      grub_error (GRUB_ERR_READ_ERROR, "No variable=value defined in parameter: %s", var_value);
       break;
     }
     if (grub_strcmp(var, "image") == 0 && !image_path)
@@ -67,7 +71,7 @@ hackbgrt_parse_param (const char* param, const char* esp_path, hackbgrt_config_t
       image_weight_str = value;
     else
     {
-      grub_error (GRUB_ERR_READ_ERROR, "Unknown variable in parameter: %s", param);
+      grub_error (GRUB_ERR_READ_ERROR, "Unknown variable in parameter: %s", var_value);
       break;
     }
   }
@@ -109,14 +113,14 @@ hackbgrt_parse_param (const char* param, const char* esp_path, hackbgrt_config_t
 fail:
   grub_print_error ();
 succeed:
-  for (char* var_value = *var_values; var_value; var_value += sizeof (char*))
-    grub_free (var_value);
+  grub_dprintf("hackbgrt", "HackBGRT: param '%s' parsed, free some memory\n", param);
   grub_free (var_values);
+  grub_free (param_dup);
   return grub_errno;
 }
 
 char**
-hackbgrt_strsplit (const char* s, const char separator)
+hackbgrt_strsplit (char* s, const char separator)
 {
   grub_size_t count = 2; // n + 1 intervals, last one is null
   char** ret;
@@ -126,7 +130,7 @@ hackbgrt_strsplit (const char* s, const char separator)
       count++;
   ret = (char**) grub_malloc (sizeof (char*) * count);
   char** elem_p = ret;
-  for (char* part = grub_strdup (s); part;)
+  for (char* part = s; part;)
   {
     char* elem = hackbgrt_strsep (&part, separator);
     if (elem)
@@ -189,6 +193,7 @@ hackbgrt_set_config_with_random(const char* esp_path, hackbgrt_config_t config, 
     grub_strncpy (config->image_path + esp_len, path, path_len);
     config->image_x = x;
     config->image_y = y;
+    grub_dprintf("hackbgrt", "HackBGRT: action %d (path %s) selected\n", config->action, config->image_path);
   }
 }
 
